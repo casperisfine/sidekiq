@@ -17,7 +17,7 @@ describe Sidekiq::RedisConnection do
 
     it "creates a pooled redis connection" do
       pool = Sidekiq::RedisConnection.create
-      assert_equal RedisClient, pool.checkout.class
+      assert_equal RedisClient, pool.with { |redis| redis.class }
     end
 
     # Readers for these ivars should be available in the next release of
@@ -37,13 +37,11 @@ describe Sidekiq::RedisConnection do
       end
 
       it "uses the specified custom pool size" do
-        pool = client_connection(size: 42)
-        assert_equal 42, pool.instance_eval { @size }
-        assert_equal 42, pool.instance_eval { @available.length }
+        pool = client_connection(size: 42).instance_variable_get(:@pool)
+        assert_equal 42, pool.size
 
-        pool = server_connection(size: 42)
-        assert_equal 42, pool.instance_eval { @size }
-        assert_equal 42, pool.instance_eval { @available.length }
+        pool = server_connection(size: 42).instance_variable_get(:@pool)
+        assert_equal 42, pool.size
       end
 
       it "defaults server pool sizes based on concurrency with padding" do
@@ -52,8 +50,7 @@ describe Sidekiq::RedisConnection do
         Sidekiq.options[:concurrency] = 6
         pool = server_connection
 
-        assert_equal 11, pool.instance_eval { @size }
-        assert_equal 11, pool.instance_eval { @available.length }
+        assert_equal 11, pool.size
       ensure
         Sidekiq.options[:concurrency] = prev_concurrency
       end
@@ -61,16 +58,14 @@ describe Sidekiq::RedisConnection do
       it "defaults client pool sizes to 5" do
         pool = client_connection
 
-        assert_equal 5, pool.instance_eval { @size }
-        assert_equal 5, pool.instance_eval { @available.length }
+        assert_equal 5, pool.size
       end
 
       it "changes client pool sizes with ENV" do
         ENV["RAILS_MAX_THREADS"] = "9"
         pool = client_connection
 
-        assert_equal 9, pool.instance_eval { @size }
-        assert_equal 9, pool.instance_eval { @available.length }
+        assert_equal 9, pool.size
       ensure
         ENV.delete("RAILS_MAX_THREADS")
       end
@@ -78,37 +73,33 @@ describe Sidekiq::RedisConnection do
 
     it "disables client setname with nil id" do
       pool = Sidekiq::RedisConnection.create(id: nil)
-      assert_equal RedisClient, pool.checkout.class
-      assert_nil pool.checkout.id
+      assert_equal RedisClient, pool.with { |redis| redis.class }
+      assert_nil pool.with { |redis| redis.id }
     end
 
     describe "network_timeout" do
       it "sets a custom network_timeout if specified" do
         pool = Sidekiq::RedisConnection.create(network_timeout: 8)
-        redis = pool.checkout
-
-        assert_equal 8, redis.read_timeout
+        assert_equal 8, pool.with { |redis| redis.read_timeout }
       end
 
       it "uses the default network_timeout if none specified" do
         pool = Sidekiq::RedisConnection.create
-        redis = pool.checkout
-
-        assert_equal 1.0, redis.read_timeout
+        assert_equal 1.0, pool.with { |redis| redis.read_timeout }
       end
     end
 
     describe "socket path" do
       it "uses a given :path" do
         pool = Sidekiq::RedisConnection.create(path: "/var/run/redis.sock")
-        assert_equal "/var/run/redis.sock", pool.checkout.config.path
+        assert_equal "/var/run/redis.sock", pool.config.path
       end
     end
 
     describe "db" do
       it "uses a given :db" do
         pool = Sidekiq::RedisConnection.create(db: 8)
-        assert_includes pool.checkout.call("CLIENT", "INFO"), " db=8 "
+        assert_includes pool.call("CLIENT", "INFO"), " db=8 "
       end
     end
 
@@ -116,13 +107,13 @@ describe Sidekiq::RedisConnection do
       it "uses a given :timeout over the default of 1" do
         pool = Sidekiq::RedisConnection.create(pool_timeout: 5)
 
-        assert_equal 5, pool.instance_eval { @timeout }
+        assert_equal 5, pool.instance_variable_get(:@pool).instance_variable_get(:@timeout)
       end
 
       it "uses the default timeout of 1 if no override" do
         pool = Sidekiq::RedisConnection.create
 
-        assert_equal 1, pool.instance_eval { @timeout }
+        assert_equal 1, pool.instance_variable_get(:@pool).instance_variable_get(:@timeout)
       end
     end
 

@@ -122,11 +122,11 @@ module Sidekiq
     @redis ||= Sidekiq::RedisConnection.create
   end
 
-  def self.redis=(hash)
-    @redis = if hash.is_a?(ConnectionPool)
-      hash
-    else
+  def self.redis=(hash_or_pool)
+    @redis = if hash_or_pool.is_a?(Hash)
       Sidekiq::RedisConnection.create(hash)
+    else
+      hash_or_pool
     end
   end
 

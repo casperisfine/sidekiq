@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "connection_pool"
 require "redis-client"
 require "uri"
 
@@ -31,10 +30,7 @@ module Sidekiq
         pool_timeout = symbolized_options.delete(:pool_timeout) || 1
         log_info(symbolized_options)
 
-        redis_config = build_config(symbolized_options)
-        ConnectionPool.new(timeout: pool_timeout, size: size) do
-          redis_config.new_client
-        end
+        build_config(symbolized_options).new_pool(timeout: pool_timeout, size: size)
       end
 
       private
